@@ -1,0 +1,8 @@
+# HackIQ Git Ignore
+~$*.docx
+*.bak
+*.tmp
+.gh_token
+cookies.txt
+test_cookie.txt
+admin_cookie.txt
