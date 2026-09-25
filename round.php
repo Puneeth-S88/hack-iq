@@ -12,7 +12,7 @@ $roundNum = isset($_GET['round']) ? (int)$_GET['round'] : 1;
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Round <?= $roundNum ?> — HackIQ Battleground</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=<?= time() ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -36,8 +36,9 @@ $roundNum = isset($_GET['round']) ? (int)$_GET['round'] : 1;
   <div class="container" style="padding-top: 1rem;">
     <div class="round-topbar">
       <div>
-        <div style="font-size:0.8rem; font-family:var(--font-mono); color:var(--accent-cyan); text-transform:uppercase;">
-          Live Battle Arena • Round <?= $roundNum ?>
+        <div style="font-size:0.8rem; font-family:var(--font-mono); color:var(--accent-cyan); text-transform:uppercase; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <span>Live Battle Arena • Round <?= $roundNum ?></span>
+          <span style="background:rgba(0,240,255,0.15); color:var(--accent-cyan); padding:2px 8px; border-radius:4px; font-weight:700; border:1px solid rgba(0,240,255,0.3);">Team: <?= htmlspecialchars($team['team_name'] ?? 'Active Team') ?></span>
         </div>
         <h2 style="font-size:1.4rem; font-weight:800; margin-top:0.2rem;" id="roundTitleHeader">
           Loading Round...
@@ -122,7 +123,7 @@ $roundNum = isset($_GET['round']) ? (int)$_GET['round'] : 1;
     </div>
   </div>
 
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=<?= time() ?>"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       ProctoringEngine.init(<?= $roundNum ?>);

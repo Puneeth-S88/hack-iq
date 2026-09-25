@@ -10,7 +10,36 @@ if (session_status() === PHP_SESSION_NONE) {
  * Check if a team is logged in
  */
 function isTeamLoggedIn() {
-    return isset($_SESSION['team_id']) && !empty($_SESSION['team_id']);
+    if (isset($_SESSION['team_id']) && !empty($_SESSION['team_id'])) {
+        return true;
+    }
+    // Auto-restore from persistent cookie if available
+    if (!empty($_COOKIE['hackiq_team_name'])) {
+        require_once __DIR__ . '/db.php';
+        $pdo = getDb();
+        if ($pdo) {
+            $cookieTeam = trim($_COOKIE['hackiq_team_name']);
+            try {
+                $stmt = $pdo->prepare("SELECT id, team_name FROM teams WHERE LOWER(team_name) = LOWER(?) LIMIT 1");
+                $stmt->execute([$cookieTeam]);
+                $team = $stmt->fetch();
+                if (!$team) {
+                    $dummyHash = password_hash('hack123', PASSWORD_DEFAULT);
+                    $stmtInsert = $pdo->prepare("INSERT INTO teams (team_name, password_hash, members_info) VALUES (?, ?, 'Team Participants')");
+                    $stmtInsert->execute([$cookieTeam, $dummyHash]);
+                    $_SESSION['team_id'] = (int)$pdo->lastInsertId();
+                    $_SESSION['team_name'] = $cookieTeam;
+                } else {
+                    $_SESSION['team_id'] = (int)$team['id'];
+                    $_SESSION['team_name'] = $team['team_name'];
+                }
+                return true;
+            } catch (Exception $e) {
+                // Ignore DB error here
+            }
+        }
+    }
+    return false;
 }
 
 /**

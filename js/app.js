@@ -37,7 +37,56 @@ const Dashboard = {
   selectedRoundNum: null,
 
   async init() {
+    this.syncTeamUI();
     await this.loadRounds();
+  },
+
+  syncTeamUI() {
+    const savedTeam = localStorage.getItem('hackiq_team_name') || this.getCookie('hackiq_team_name') || '';
+    if (savedTeam) {
+      const display = document.getElementById('displayTeamName');
+      if (display) display.innerText = savedTeam;
+      const globalInput = document.getElementById('globalTeamNameInput');
+      if (globalInput && !globalInput.value) globalInput.value = savedTeam;
+      const teamBadge = document.getElementById('currentTeamBadge');
+      if (teamBadge) {
+        teamBadge.innerText = savedTeam;
+        teamBadge.parentElement.style.display = 'flex';
+      }
+    }
+  },
+
+  getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? decodeURIComponent(v[2]) : null;
+  },
+
+  onGlobalTeamNameChange(val) {
+    const trimmed = (val || '').trim();
+    if (trimmed) {
+      localStorage.setItem('hackiq_team_name', trimmed);
+      document.cookie = `hackiq_team_name=${encodeURIComponent(trimmed)}; path=/; max-age=604800`;
+      const display = document.getElementById('displayTeamName');
+      if (display) display.innerText = trimmed;
+      const badge = document.getElementById('currentTeamBadge');
+      if (badge) {
+        badge.innerText = trimmed;
+        badge.parentElement.style.display = 'flex';
+      }
+      const modalTeam = document.getElementById('teamNameInput');
+      if (modalTeam) modalTeam.value = trimmed;
+    }
+  },
+
+  saveGlobalTeamName() {
+    const input = document.getElementById('globalTeamNameInput');
+    const val = input ? input.value.trim() : '';
+    if (!val) {
+      App.showToast('Please type a team name first.');
+      return;
+    }
+    this.onGlobalTeamNameChange(val);
+    App.showToast(`Team saved: ${val}`, false);
   },
 
   async loadRounds() {
@@ -50,12 +99,12 @@ const Dashboard = {
       return;
     }
 
-    const savedTeam = localStorage.getItem('hackiq_team_name') || (data.team ? data.team.team_name : '');
-    const teamHeader = document.getElementById('currentTeamBadge');
-    if (teamHeader && savedTeam) {
-      teamHeader.innerText = savedTeam;
-      teamHeader.parentElement.style.display = 'flex';
+    if (data.team && data.team.team_name) {
+      if (!localStorage.getItem('hackiq_team_name')) {
+        localStorage.setItem('hackiq_team_name', data.team.team_name);
+      }
     }
+    this.syncTeamUI();
 
     container.innerHTML = '';
     data.rounds.forEach(r => {
@@ -108,7 +157,9 @@ const Dashboard = {
     document.getElementById('passwordError').style.display = 'none';
 
     // Auto-fill saved team name if available
-    const savedTeam = localStorage.getItem('hackiq_team_name') || '';
+    const savedTeam = (document.getElementById('globalTeamNameInput') && document.getElementById('globalTeamNameInput').value.trim()) ||
+                      localStorage.getItem('hackiq_team_name') || 
+                      this.getCookie('hackiq_team_name') || '';
     const teamInput = document.getElementById('teamNameInput');
     if (teamInput) {
       teamInput.value = savedTeam;
@@ -131,21 +182,34 @@ const Dashboard = {
 
   async verifyPassword() {
     const teamNameInput = document.getElementById('teamNameInput');
-    const teamName = teamNameInput ? teamNameInput.value.trim() : (localStorage.getItem('hackiq_team_name') || '');
-    const password = document.getElementById('roundPasswordInput').value.trim();
+    const globalInput = document.getElementById('globalTeamNameInput');
+    let teamName = (teamNameInput && teamNameInput.value.trim()) || 
+                   (globalInput && globalInput.value.trim()) || 
+                   localStorage.getItem('hackiq_team_name') || 
+                   this.getCookie('hackiq_team_name') || '';
+
+    // If completely empty, generate a fallback team name so it NEVER blocks
+    if (!teamName) {
+      teamName = 'Team_' + (Math.floor(Math.random() * 89) + 10);
+      if (teamNameInput) teamNameInput.value = teamName;
+      if (globalInput) globalInput.value = teamName;
+    }
+
+    const passwordInput = document.getElementById('roundPasswordInput');
+    const password = passwordInput ? passwordInput.value.trim() : '';
     const errorEl = document.getElementById('passwordError');
 
-    if (!teamName) {
-      errorEl.innerText = 'Please enter your Team Name.';
-      errorEl.style.display = 'block';
+    if (!password) {
+      if (errorEl) {
+        errorEl.innerText = 'Please enter the secret round passcode announced by coordinators.';
+        errorEl.style.display = 'block';
+      }
       return;
     }
 
-    if (!password) {
-      errorEl.innerText = 'Please enter the round password.';
-      errorEl.style.display = 'block';
-      return;
-    }
+    // Persist immediately in client storage
+    localStorage.setItem('hackiq_team_name', teamName);
+    document.cookie = `hackiq_team_name=${encodeURIComponent(teamName)}; path=/; max-age=604800`;
 
     const res = await App.fetch('api/verify_round_password.php', {
       method: 'POST',
@@ -157,11 +221,12 @@ const Dashboard = {
     });
 
     if (res.success) {
-      localStorage.setItem('hackiq_team_name', teamName);
       window.location.href = `round.php?round=${this.selectedRoundNum}`;
     } else {
-      errorEl.innerText = res.error || 'Incorrect password.';
-      errorEl.style.display = 'block';
+      if (errorEl) {
+        errorEl.innerText = res.error || 'Incorrect passcode for this round.';
+        errorEl.style.display = 'block';
+      }
     }
   },
 

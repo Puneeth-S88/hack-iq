@@ -39,9 +39,10 @@ try {
         $team_name = $team['team_name'];
     }
 
-    // Set session
+    // Set session and persistent cookie
     $_SESSION['team_id']   = $teamId;
     $_SESSION['team_name'] = $team_name;
+    setcookie('hackiq_team_name', $team_name, time() + 86400 * 7, '/');
 
     sendJson([
         'success' => true,

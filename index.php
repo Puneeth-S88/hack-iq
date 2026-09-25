@@ -9,7 +9,7 @@ $team = getLoggedInTeam();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HackIQ — Think Fast. Hack Smart.</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=<?= time() ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -78,10 +78,29 @@ $team = getLoggedInTeam();
 
   <!-- All 7 Rounds Direct Grid -->
   <div class="container" style="padding-top:0;">
+
+    <!-- Quick Team Name Setup Card -->
+    <div class="card" style="margin-bottom:1.5rem; background:linear-gradient(135deg, rgba(0, 240, 255, 0.08), rgba(15, 23, 42, 0.7)); border:1px solid rgba(0, 240, 255, 0.35);">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <div style="font-weight:700; font-size:1.1rem; color:var(--accent-cyan); display:flex; align-items:center; gap:0.5rem;">
+            <span>🛡️</span> Your Team: <span id="displayTeamName" style="color:#fff; font-family:var(--font-mono); font-weight:800;"><?= htmlspecialchars($team['team_name'] ?? 'Not set') ?></span>
+          </div>
+          <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.25rem;">
+            Enter your team name once. Only secret round passwords are required to unlock each round!
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem; flex:1; max-width:420px; min-width:260px;">
+          <input type="text" id="globalTeamNameInput" class="form-input" placeholder="Type Team Name (e.g. CyberKnights)" value="<?= htmlspecialchars($team['team_name'] ?? '') ?>" oninput="Dashboard.onGlobalTeamNameChange(this.value)">
+          <button class="btn btn-cyan btn-sm" onclick="Dashboard.saveGlobalTeamName()" style="white-space:nowrap;">Save Team</button>
+        </div>
+      </div>
+    </div>
+
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:1rem;">
       <div>
         <h2 style="font-size:1.6rem; font-weight:800;">Tournament Rounds (1 to 7)</h2>
-        <p style="color:var(--text-muted); font-size:0.9rem;">Click any round below and enter the round password to begin answering.</p>
+        <p style="color:var(--text-muted); font-size:0.9rem;">Click any round below and enter the round password announced by coordinators.</p>
       </div>
       <a href="leaderboard.php" class="btn btn-cyan btn-sm">View Live Rankings →</a>
     </div>
@@ -110,7 +129,7 @@ $team = getLoggedInTeam();
       <div class="form-group">
         <label class="form-label" for="teamNameInput">Team Name</label>
         <input type="text" id="teamNameInput" class="form-input" placeholder="e.g. CyberKnights" required>
-        <div class="form-help">Enter your registered team name (remembered for all rounds).</div>
+        <div class="form-help">Any name for your group (no login password needed).</div>
       </div>
 
       <div class="form-group">
@@ -132,7 +151,7 @@ $team = getLoggedInTeam();
     <div class="footer-meta">Audit LSL04 • 15.10.2026 • Student Coordinators: Puneeth S & Prajwal BU</div>
   </footer>
 
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=<?= time() ?>"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       Dashboard.init();

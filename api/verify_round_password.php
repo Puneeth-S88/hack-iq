@@ -1,5 +1,5 @@
 <?php
-// api/verify_round_password.php - Streamlined round passcode verification
+// api/verify_round_password.php - Bulletproof Round Entry (Team Name can be anything, never fails on team name)
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 
@@ -21,9 +21,19 @@ if (!$pdo) {
     sendJson(['success' => false, 'error' => 'Database connection unavailable.'], 500);
 }
 
-// 1. Establish Team Session (either from existing session or from submitted team_name)
-if (!empty($teamName)) {
-    // Look up or auto-create team
+// 1. Establish Team Name (can be anything! If omitted, auto-generate fallback so it never fails)
+if (empty($teamName)) {
+    if (isTeamLoggedIn() && !empty($_SESSION['team_name'])) {
+        $teamName = $_SESSION['team_name'];
+    } elseif (!empty($_COOKIE['hackiq_team_name'])) {
+        $teamName = trim($_COOKIE['hackiq_team_name']);
+    } else {
+        $teamName = 'Team_' . rand(1, 15);
+    }
+}
+
+// Look up or auto-create team with this name in DB
+try {
     $stmt = $pdo->prepare("SELECT id, team_name FROM teams WHERE LOWER(team_name) = LOWER(?) LIMIT 1");
     $stmt->execute([$teamName]);
     $team = $stmt->fetch();
@@ -38,21 +48,25 @@ if (!empty($teamName)) {
         $teamName = $team['team_name'];
     }
 
+    // Set session & persistent cookie
     $_SESSION['team_id']   = $teamId;
     $_SESSION['team_name'] = $teamName;
-} elseif (isTeamLoggedIn()) {
-    $teamId   = (int)$_SESSION['team_id'];
-    $teamName = $_SESSION['team_name'];
-} else {
-    sendJson(['success' => false, 'error' => 'Please provide your Team Name.'], 400);
+    setcookie('hackiq_team_name', $teamName, time() + 86400, '/');
+
+} catch (Exception $e) {
+    sendJson(['success' => false, 'error' => 'Team setup error: ' . $e->getMessage()], 500);
 }
 
-if ($roundId <= 0 || empty($password)) {
-    sendJson(['success' => false, 'error' => 'Round ID and password are required.'], 400);
+// 2. Validate Round & Password
+if ($roundId <= 0) {
+    sendJson(['success' => false, 'error' => 'Round ID is required.'], 400);
+}
+
+if (empty($password)) {
+    sendJson(['success' => false, 'error' => 'Please enter the round password.'], 400);
 }
 
 try {
-    // 2. Fetch round details
     $stmt = $pdo->prepare("SELECT id, round_number, round_name, round_password_hash, plain_password_hint, is_active FROM rounds WHERE id = ?");
     $stmt->execute([$roundId]);
     $round = $stmt->fetch();
@@ -62,10 +76,10 @@ try {
     }
 
     if (!$round['is_active']) {
-        sendJson(['success' => false, 'error' => 'This round is currently locked by the event coordinators.'], 403);
+        sendJson(['success' => false, 'error' => 'This round is currently locked by event coordinators.'], 403);
     }
 
-    // 3. Verify password (case-insensitive comparison with plain hint OR bcrypt hash)
+    // Compare round password (case-insensitive)
     $inputUpper = strtoupper($password);
     $hintUpper  = strtoupper($round['plain_password_hint'] ?? '');
 
@@ -77,7 +91,7 @@ try {
         sendJson(['success' => false, 'error' => 'Incorrect password for ' . $round['round_name'] . '. Please check with coordinators.'], 401);
     }
 
-    // 4. Record access in team_round_access
+    // Record access
     $stmtAccess = $pdo->prepare("
         INSERT INTO team_round_access (team_id, round_id, unlocked_at, started_at)
         VALUES (?, ?, NOW(), NOW())
