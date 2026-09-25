@@ -1,6 +1,5 @@
-// js/app.js - HackIQ Frontend Logic, Proctoring Engine & Real-Time Sync
+// js/app.js - HackIQ Direct Arena & Proctoring Engine
 
-// Global utility helper
 const App = {
   async fetch(url, options = {}) {
     options.headers = options.headers || {};
@@ -32,56 +31,44 @@ const App = {
   }
 };
 
-// ======================== DASHBOARD MODULE ========================
+// ======================== DIRECT ROUND ARENA MODULE ========================
 const Dashboard = {
   selectedRoundId: null,
+  selectedRoundNum: null,
 
   async init() {
-    await this.loadDashboardData();
+    await this.loadRounds();
   },
 
-  async loadDashboardData() {
+  async loadRounds() {
     const container = document.getElementById('roundsContainer');
     if (!container) return;
 
     const data = await App.fetch('api/get_dashboard.php');
     if (!data.success) {
-      if (data.error && data.error.includes('Unauthorized')) {
-        window.location.href = 'login.php';
-      }
+      container.innerHTML = '<div style="color:var(--accent-red); text-align:center;">Failed to load tournament rounds.</div>';
       return;
     }
 
-    // Update team stats
-    const standing = data.standing;
-    const team = data.team;
+    const savedTeam = localStorage.getItem('hackiq_team_name') || (data.team ? data.team.team_name : '');
+    const teamHeader = document.getElementById('currentTeamBadge');
+    if (teamHeader && savedTeam) {
+      teamHeader.innerText = savedTeam;
+      teamHeader.parentElement.style.display = 'flex';
+    }
 
-    const nameEl = document.getElementById('dashTeamName');
-    if (nameEl) nameEl.innerText = team.team_name;
-
-    const scoreEl = document.getElementById('dashTeamScore');
-    if (scoreEl) scoreEl.innerText = standing.total_points + ' pts';
-
-    const rankEl = document.getElementById('dashTeamRank');
-    if (rankEl) rankEl.innerText = '#' + standing.rank;
-
-    // Render Rounds
     container.innerHTML = '';
     data.rounds.forEach(r => {
       const card = document.createElement('div');
-      card.className = `card round-card ${!r.is_eligible || !r.is_active ? 'locked' : ''} ${r.is_completed ? 'completed' : ''} ${r.round_number >= 6 ? 'special-round' : ''}`;
+      card.className = `card round-card ${!r.is_active ? 'locked' : ''} ${r.is_completed ? 'completed' : ''}`;
       
       let badgeHtml = '';
       if (!r.is_active) {
         badgeHtml = `<span class="status-badge locked">🔒 Inactive</span>`;
-      } else if (!r.is_eligible) {
-        badgeHtml = `<span class="status-badge locked">🔒 ${r.round_number === 6 ? 'Top 5 Only' : 'Top 3 Only'}</span>`;
       } else if (r.is_completed) {
         badgeHtml = `<span class="status-badge completed">✔ Completed (${r.score} pts)</span>`;
-      } else if (r.is_unlocked) {
-        badgeHtml = `<span class="status-badge unlocked">🔓 Unlocked</span>`;
       } else {
-        badgeHtml = `<span class="status-badge locked">🔑 Passcode Required</span>`;
+        badgeHtml = `<span class="status-badge unlocked">🔑 Passcode Protected</span>`;
       }
 
       card.innerHTML = `
@@ -95,17 +82,15 @@ const Dashboard = {
           <div class="round-meta-row">
             <span class="round-meta-item">⏱ ${r.time_limit_minutes} Mins</span>
             <span class="round-meta-item">🛡 Max Strikes: ${r.max_violations}</span>
-            ${r.is_completed && r.flagged ? `<span class="round-meta-item" style="color:var(--accent-red);">⚠️ Violation Flagged</span>` : ''}
+            ${r.is_completed && r.flagged ? `<span class="round-meta-item" style="color:var(--accent-red);">⚠️ Strikes Flagged</span>` : ''}
           </div>
         </div>
-        <div style="margin-top: 1rem;">
+        <div style="margin-top: 1.25rem;">
           ${r.is_completed 
-            ? `<button class="btn btn-secondary btn-block" onclick="Dashboard.viewCompletedRound(${r.round_number}, ${r.score})">View Round Summary</button>`
-            : (!r.is_eligible || !r.is_active)
-              ? `<button class="btn btn-secondary btn-block" disabled title="${r.lock_reason || 'Locked by admin'}">Locked</button>`
-              : `<button class="btn btn-primary btn-block" onclick="Dashboard.openPasswordModal(${r.id}, ${r.round_number}, '${r.round_name.replace(/'/g, "\\'")}', ${r.is_unlocked})">
-                  ${r.is_unlocked ? 'Enter Round' : 'Unlock & Start'}
-                </button>`
+            ? `<button class="btn btn-secondary btn-block" onclick="Dashboard.viewCompletedRound(${r.round_number}, ${r.score})">View Answers & Score</button>`
+            : `<button class="btn btn-primary btn-block" onclick="Dashboard.openPasswordModal(${r.id}, ${r.round_number}, '${r.round_name.replace(/'/g, "\\'")}')">
+                Enter Round ${r.round_number} →
+              </button>`
           }
         </div>
       `;
@@ -113,19 +98,30 @@ const Dashboard = {
     });
   },
 
-  openPasswordModal(roundId, roundNum, roundName, isUnlocked) {
-    if (isUnlocked) {
-      window.location.href = `round.php?round=${roundNum}`;
-      return;
-    }
+  openPasswordModal(roundId, roundNum, roundName) {
     this.selectedRoundId = roundId;
     this.selectedRoundNum = roundNum;
+
     const modal = document.getElementById('passwordModal');
-    document.getElementById('modalRoundTitle').innerText = roundName;
+    document.getElementById('modalRoundTitle').innerText = `${roundName}`;
     document.getElementById('roundPasswordInput').value = '';
     document.getElementById('passwordError').style.display = 'none';
+
+    // Auto-fill saved team name if available
+    const savedTeam = localStorage.getItem('hackiq_team_name') || '';
+    const teamInput = document.getElementById('teamNameInput');
+    if (teamInput) {
+      teamInput.value = savedTeam;
+    }
+
     modal.classList.add('active');
-    setTimeout(() => document.getElementById('roundPasswordInput').focus(), 100);
+    setTimeout(() => {
+      if (!savedTeam && teamInput) {
+        teamInput.focus();
+      } else {
+        document.getElementById('roundPasswordInput').focus();
+      }
+    }, 100);
   },
 
   closePasswordModal() {
@@ -134,8 +130,17 @@ const Dashboard = {
   },
 
   async verifyPassword() {
+    const teamNameInput = document.getElementById('teamNameInput');
+    const teamName = teamNameInput ? teamNameInput.value.trim() : (localStorage.getItem('hackiq_team_name') || '');
     const password = document.getElementById('roundPasswordInput').value.trim();
     const errorEl = document.getElementById('passwordError');
+
+    if (!teamName) {
+      errorEl.innerText = 'Please enter your Team Name.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
     if (!password) {
       errorEl.innerText = 'Please enter the round password.';
       errorEl.style.display = 'block';
@@ -144,10 +149,15 @@ const Dashboard = {
 
     const res = await App.fetch('api/verify_round_password.php', {
       method: 'POST',
-      body: { round_id: this.selectedRoundId, password }
+      body: {
+        round_id: this.selectedRoundId,
+        password: password,
+        team_name: teamName
+      }
     });
 
     if (res.success) {
+      localStorage.setItem('hackiq_team_name', teamName);
       window.location.href = `round.php?round=${this.selectedRoundNum}`;
     } else {
       errorEl.innerText = res.error || 'Incorrect password.';
@@ -177,12 +187,12 @@ const ProctoringEngine = {
 
     if (!res.success) {
       if (res.requires_password) {
-        alert('Password required for this round. Redirecting to dashboard...');
-        window.location.href = 'dashboard.php';
+        alert('Password entry required for this round. Redirecting to Arena...');
+        window.location.href = 'index.php';
         return;
       }
       alert(res.error || 'Unable to access round.');
-      window.location.href = 'dashboard.php';
+      window.location.href = 'index.php';
       return;
     }
 
@@ -192,11 +202,15 @@ const ProctoringEngine = {
     this.remainingSeconds = (res.round.time_limit_minutes || 15) * 60;
     this.isReviewMode = res.already_submitted;
 
+    const roundTitleHeader = document.getElementById('roundTitleHeader');
+    if (roundTitleHeader) {
+      roundTitleHeader.innerText = `${res.round.round_name} • Team: ${res.team_name || 'Participant'}`;
+    }
+
     this.renderQuestions(res.questions, res.already_submitted, res.team_answers, res.score);
     this.updateStrikeDisplay();
 
     if (res.already_submitted) {
-      // Review mode: hide start overlay, disable timers and strike listeners
       const overlay = document.getElementById('fullscreenPromptOverlay');
       if (overlay) overlay.style.display = 'none';
       const submitBtn = document.getElementById('submitRoundBtn');
@@ -205,7 +219,7 @@ const ProctoringEngine = {
       return;
     }
 
-    // Active answering mode
+    // Active round
     this.setupEventListeners();
   },
 
@@ -225,7 +239,7 @@ const ProctoringEngine = {
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
           <div>
             <h3 style="color:var(--accent-green); margin-bottom:0.25rem;">Round Completed ✔</h3>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Submitted at ${scoreData.submitted_at} ${scoreData.flagged ? '<span style="color:var(--accent-red);">(Violations Flagged)</span>' : ''}</p>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Submitted at ${scoreData.submitted_at} ${scoreData.flagged ? '<span style="color:var(--accent-red);">(Strikes Flagged)</span>' : ''}</p>
           </div>
           <div style="font-size:1.5rem; font-weight:800; font-family:var(--font-mono); color:var(--accent-green);">
             Score: ${scoreData.total_points} pts (${scoreData.total_correct} Correct)
@@ -261,7 +275,6 @@ const ProctoringEngine = {
         `;
       }
 
-      // Build options
       const options = [
         { key: 'A', text: q.option_a },
         { key: 'B', text: q.option_b },
@@ -306,9 +319,7 @@ const ProctoringEngine = {
     const elem = document.documentElement;
     const req = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
     if (req) {
-      req.call(elem).catch(() => {
-        console.warn('Fullscreen request blocked or unsupported');
-      });
+      req.call(elem).catch(() => {});
     }
     const overlay = document.getElementById('fullscreenPromptOverlay');
     if (overlay) overlay.style.display = 'none';
@@ -322,7 +333,7 @@ const ProctoringEngine = {
     const update = () => {
       if (this.remainingSeconds <= 0) {
         clearInterval(this.timerInterval);
-        this.submitRound(false, true); // Auto-submit when time expires
+        this.submitRound(false, true);
         return;
       }
       this.remainingSeconds--;
@@ -341,7 +352,6 @@ const ProctoringEngine = {
   },
 
   setupEventListeners() {
-    // 1. Right Click Prevention
     document.addEventListener('contextmenu', (e) => {
       if (!this.isActive) return;
       e.preventDefault();
@@ -349,7 +359,6 @@ const ProctoringEngine = {
       this.recordViolation('right_click');
     });
 
-    // 2. Copy/Cut/Paste Prevention
     ['copy', 'cut', 'paste'].forEach(evt => {
       document.addEventListener(evt, (e) => {
         if (!this.isActive) return;
@@ -359,25 +368,21 @@ const ProctoringEngine = {
       });
     });
 
-    // 3. Prohibited Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
       if (!this.isActive) return;
 
-      // F12 or Inspect (Ctrl+Shift+I / Cmd+Opt+I)
-      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))) {
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(e.key.toLowerCase()))) {
         e.preventDefault();
         App.showToast('Developer tools shortcuts are blocked.');
         this.recordViolation('devtools_key');
       }
 
-      // Ctrl+U (View Source), Ctrl+S (Save), Ctrl+P (Print)
       if (e.ctrlKey && ['u', 's', 'p'].includes(e.key.toLowerCase())) {
         e.preventDefault();
         App.showToast('Shortcut disabled during the round.');
         this.recordViolation('devtools_key');
       }
 
-      // Ctrl+C / Ctrl+V
       if (e.ctrlKey && ['c', 'v', 'x'].includes(e.key.toLowerCase())) {
         e.preventDefault();
         App.showToast('Copy/Paste shortcuts are disabled.');
@@ -385,7 +390,6 @@ const ProctoringEngine = {
       }
     });
 
-    // 4. Tab-switch / Window-blur Detection
     document.addEventListener('visibilitychange', () => {
       if (!this.isActive) return;
       if (document.hidden) {
@@ -398,7 +402,6 @@ const ProctoringEngine = {
       this.recordViolation('tab_switch');
     });
 
-    // 5. Fullscreen change enforcement
     document.addEventListener('fullscreenchange', () => {
       if (!this.isActive) return;
       if (!document.fullscreenElement) {
@@ -411,11 +414,10 @@ const ProctoringEngine = {
       }
     });
 
-    // 6. Native confirmation dialog on accidental tab close / refresh
     window.addEventListener('beforeunload', (e) => {
       if (this.isActive) {
         e.preventDefault();
-        e.returnValue = 'Are you sure you want to leave? Your round answers may be lost.';
+        e.returnValue = 'Are you sure you want to leave? Your answers will not be submitted.';
       }
     });
   },
@@ -482,7 +484,7 @@ const ProctoringEngine = {
 
   async submitRound(isViolationSubmit = false, isTimeOut = false) {
     if (!isViolationSubmit && !isTimeOut) {
-      if (!confirm('Are you sure you want to submit your answers for this round? You cannot resubmit after confirmation.')) {
+      if (!confirm('Submit answers for this round? You cannot change them after submitting.')) {
         return;
       }
     }
@@ -508,7 +510,7 @@ const ProctoringEngine = {
       resultsModal.classList.add('active');
     } else {
       alert(res.error || 'Submission error.');
-      window.location.href = 'dashboard.php';
+      window.location.href = 'index.php';
     }
   }
 };

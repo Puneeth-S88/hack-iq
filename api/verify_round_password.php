@@ -1,9 +1,7 @@
 <?php
-// api/verify_round_password.php - Verify per-round password gate
+// api/verify_round_password.php - Streamlined round passcode verification
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
-
-requireTeamAuth(true);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     sendJson(['success' => false, 'error' => 'Method not allowed'], 405);
@@ -14,22 +12,48 @@ if (!$input) {
     $input = $_POST;
 }
 
-$roundId  = isset($input['round_id']) ? (int)$input['round_id'] : 0;
-$password = trim($input['password'] ?? '');
-$teamId   = (int)$_SESSION['team_id'];
-
-if ($roundId <= 0 || empty($password)) {
-    sendJson(['success' => false, 'error' => 'Round ID and password are required.'], 400);
-}
+$roundId   = isset($input['round_id']) ? (int)$input['round_id'] : 0;
+$password  = trim($input['password'] ?? '');
+$teamName  = trim($input['team_name'] ?? '');
 
 $pdo = getDb();
 if (!$pdo) {
     sendJson(['success' => false, 'error' => 'Database connection unavailable.'], 500);
 }
 
+// 1. Establish Team Session (either from existing session or from submitted team_name)
+if (!empty($teamName)) {
+    // Look up or auto-create team
+    $stmt = $pdo->prepare("SELECT id, team_name FROM teams WHERE LOWER(team_name) = LOWER(?) LIMIT 1");
+    $stmt->execute([$teamName]);
+    $team = $stmt->fetch();
+
+    if (!$team) {
+        $dummyHash = password_hash('hack123', PASSWORD_DEFAULT);
+        $stmtInsert = $pdo->prepare("INSERT INTO teams (team_name, password_hash, members_info) VALUES (?, ?, 'Team Participants')");
+        $stmtInsert->execute([$teamName, $dummyHash]);
+        $teamId = (int)$pdo->lastInsertId();
+    } else {
+        $teamId = (int)$team['id'];
+        $teamName = $team['team_name'];
+    }
+
+    $_SESSION['team_id']   = $teamId;
+    $_SESSION['team_name'] = $teamName;
+} elseif (isTeamLoggedIn()) {
+    $teamId   = (int)$_SESSION['team_id'];
+    $teamName = $_SESSION['team_name'];
+} else {
+    sendJson(['success' => false, 'error' => 'Please provide your Team Name.'], 400);
+}
+
+if ($roundId <= 0 || empty($password)) {
+    sendJson(['success' => false, 'error' => 'Round ID and password are required.'], 400);
+}
+
 try {
-    // 1. Fetch round details
-    $stmt = $pdo->prepare("SELECT id, round_number, round_name, round_password_hash, is_active FROM rounds WHERE id = ?");
+    // 2. Fetch round details
+    $stmt = $pdo->prepare("SELECT id, round_number, round_name, round_password_hash, plain_password_hint, is_active FROM rounds WHERE id = ?");
     $stmt->execute([$roundId]);
     $round = $stmt->fetch();
 
@@ -41,36 +65,15 @@ try {
         sendJson(['success' => false, 'error' => 'This round is currently locked by the event coordinators.'], 403);
     }
 
-    $roundNumber = (int)$round['round_number'];
+    // 3. Verify password (case-insensitive comparison with plain hint OR bcrypt hash)
+    $inputUpper = strtoupper($password);
+    $hintUpper  = strtoupper($round['plain_password_hint'] ?? '');
 
-    // 2. Enforce qualification cutoffs for Semifinal (R6) and Final (R7)
-    if ($roundNumber >= 6) {
-        $stmtRank = $pdo->query("
-            SELECT t.id, COALESCE(SUM(rs.total_points), 0) AS pts, COALESCE(SUM(rs.total_correct), 0) AS cor
-            FROM teams t
-            LEFT JOIN round_scores rs ON t.id = rs.team_id
-            GROUP BY t.id
-            ORDER BY pts DESC, cor DESC, t.id ASC
-        ");
-        $allRankings = $stmtRank->fetchAll();
-        $teamRank = 999;
-        foreach ($allRankings as $idx => $r) {
-            if ((int)$r['id'] === $teamId) {
-                $teamRank = $idx + 1;
-                break;
-            }
-        }
+    $passwordMatches = ($inputUpper === $hintUpper) 
+        || password_verify($password, $round['round_password_hash']) 
+        || password_verify($inputUpper, $round['round_password_hash']);
 
-        if ($roundNumber === 6 && $teamRank > 5) {
-            sendJson(['success' => false, 'error' => 'Access Denied: Only Top 5 teams are qualified for Round 6 Semifinals.'], 403);
-        }
-        if ($roundNumber === 7 && $teamRank > 3) {
-            sendJson(['success' => false, 'error' => 'Access Denied: Only Top 3 teams are qualified for Round 7 Final Showdown.'], 403);
-        }
-    }
-
-    // 3. Verify password
-    if (!password_verify($password, $round['round_password_hash'])) {
+    if (!$passwordMatches) {
         sendJson(['success' => false, 'error' => 'Incorrect password for ' . $round['round_name'] . '. Please check with coordinators.'], 401);
     }
 
@@ -84,9 +87,10 @@ try {
 
     sendJson([
         'success'      => true,
-        'message'      => 'Password verified! Proceeding to ' . $round['round_name'],
-        'round_number' => $roundNumber,
-        'round_id'     => $roundId
+        'message'      => 'Password verified! Opening ' . $round['round_name'],
+        'round_number' => (int)$round['round_number'],
+        'round_id'     => $roundId,
+        'team_name'    => $teamName
     ]);
 
 } catch (Exception $e) {

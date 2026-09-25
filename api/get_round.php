@@ -31,33 +31,7 @@ try {
         sendJson(['success' => false, 'error' => 'This round is currently locked by the coordinators.'], 403);
     }
 
-    // 3. Qualification check for Round 6 & 7
-    if ($roundNumber >= 6) {
-        $stmtRank = $pdo->query("
-            SELECT t.id, COALESCE(SUM(rs.total_points), 0) AS pts, COALESCE(SUM(rs.total_correct), 0) AS cor
-            FROM teams t
-            LEFT JOIN round_scores rs ON t.id = rs.team_id
-            GROUP BY t.id
-            ORDER BY pts DESC, cor DESC, t.id ASC
-        ");
-        $allRankings = $stmtRank->fetchAll();
-        $teamRank = 999;
-        foreach ($allRankings as $idx => $r) {
-            if ((int)$r['id'] === $teamId) {
-                $teamRank = $idx + 1;
-                break;
-            }
-        }
-
-        if ($roundNumber === 6 && $teamRank > 5) {
-            sendJson(['success' => false, 'error' => 'Round 6 is exclusive to Top 5 teams. Your rank: #' . $teamRank], 403);
-        }
-        if ($roundNumber === 7 && $teamRank > 3) {
-            sendJson(['success' => false, 'error' => 'Round 7 is exclusive to Top 3 teams. Your rank: #' . $teamRank], 403);
-        }
-    }
-
-    // 4. Verify round password unlock status
+    // 3. Verify round password unlock status
     $stmtAccess = $pdo->prepare("SELECT unlocked_at, started_at FROM team_round_access WHERE team_id = ? AND round_id = ?");
     $stmtAccess->execute([$teamId, $roundId]);
     $access = $stmtAccess->fetch();
@@ -73,18 +47,18 @@ try {
         ], 403);
     }
 
-    // 5. Check if already submitted
+    // 4. Check if already submitted
     $stmtScore = $pdo->prepare("SELECT total_correct, total_points, submitted_at, flagged, manual_override, admin_notes FROM round_scores WHERE team_id = ? AND round_id = ?");
     $stmtScore->execute([$teamId, $roundId]);
     $score = $stmtScore->fetch();
 
-    // 6. Fetch team's current violations / strikes count
+    // 5. Fetch team's current violations / strikes count
     $stmtViolations = $pdo->prepare("SELECT COUNT(*) AS violation_count FROM round_violations WHERE team_id = ? AND round_id = ?");
     $stmtViolations->execute([$teamId, $roundId]);
     $violationRow = $stmtViolations->fetch();
     $currentStrikes = $violationRow ? (int)$violationRow['violation_count'] : 0;
 
-    // 7. Fetch questions
+    // 6. Fetch questions
     $stmtQ = $pdo->prepare("
         SELECT id, round_id, question_text, question_type, option_a, option_b, option_c, option_d, points, order_num, meta_info
         FROM questions
@@ -136,6 +110,7 @@ try {
 
     sendJson([
         'success'           => true,
+        'team_name'         => $_SESSION['team_name'] ?? 'Team',
         'round'             => [
             'id'                     => $roundId,
             'round_number'           => $roundNumber,

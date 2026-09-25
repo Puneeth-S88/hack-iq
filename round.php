@@ -49,7 +49,7 @@ $roundNum = isset($_GET['round']) ? (int)$_GET['round'] : 1;
           <span>⏱</span>
           <span id="roundTimer">--:--</span>
         </div>
-        <a href="dashboard.php" class="btn btn-secondary btn-sm" onclick="return confirm('Return to Dashboard? Unsubmitted answers will remain unrecorded.');">Dashboard</a>
+        <a href="index.php" class="btn btn-secondary btn-sm" onclick="return confirm('Return to Rounds Arena? Unsubmitted answers will remain unrecorded.');">Arena</a>
       </div>
     </div>
 
@@ -116,7 +116,7 @@ $roundNum = isset($_GET['round']) ? (int)$_GET['round'] : 1;
       </div>
 
       <div style="display:flex; justify-content:center; gap:1rem;">
-        <a href="dashboard.php" class="btn btn-primary">Return to Dashboard</a>
+        <a href="index.php" class="btn btn-primary">Return to Rounds Arena</a>
         <a href="leaderboard.php" class="btn btn-secondary">View Leaderboard</a>
       </div>
     </div>

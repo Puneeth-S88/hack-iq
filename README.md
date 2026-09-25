@@ -10,14 +10,11 @@
 ## 1. System Overview
 
 **HackIQ** is a full-featured tournament quiz web platform engineered for a 7-round cybersecurity tournament for mixed-year participants. It includes:
-- **Round-by-round access gating** via per-round passcodes announced by event coordinators.
+- **Direct Round Access**: Teams see Round 1 to 7 directly on the home arena screen.
+- **Round Passcode Verification**: Teams simply enter their Team Name and the per-round secret passcode announced by coordinators to unlock and start each round.
 - **Strict Anti-Cheating & Proctoring Engine** on live round pages (fullscreen lockdown, strike system, tab-switch & shortcut detection).
 - **Auto-grading** for MCQs, True/False, Phishing cards, Cryptographic ciphers, and tactical scenarios.
 - **Live Jury Evaluation Portal** for Round 5 Case Study Pitches, Round 6 Part B Jury Explain, and Round 7 Tiebreakers.
-- **Top 5 & Top 3 Cutoff Logic**:
-  - Rounds 1 to 5: Open to all 15 competing teams.
-  - Round 6 (Semifinal): Automatically unlocks only for the **Top 5** cumulative scorers.
-  - Round 7 (Final Showdown): Automatically unlocks only for the **Top 3** finalists.
 - **Real-Time Live Leaderboard** with auto-refresh every 10 seconds and Projector View mode for auditorium screens.
 
 ---
