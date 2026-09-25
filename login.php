@@ -1,10 +1,32 @@
 <?php
-// login.php - Team Authentication (Login & Register)
+// login.php - Streamlined Team Entry (No complex password needed - Team Name can be anything!)
 require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/db.php';
 
-if (isTeamLoggedIn()) {
-    header('Location: dashboard.php');
-    exit;
+// If team name submitted via POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $teamName = trim($_POST['team_name'] ?? '');
+    if (!empty($teamName)) {
+        $pdo = getDb();
+        if ($pdo) {
+            $stmt = $pdo->prepare("SELECT id, team_name FROM teams WHERE LOWER(team_name) = LOWER(?) LIMIT 1");
+            $stmt->execute([$teamName]);
+            $team = $stmt->fetch();
+            if (!$team) {
+                $dummy = password_hash('hack123', PASSWORD_DEFAULT);
+                $stmtInsert = $pdo->prepare("INSERT INTO teams (team_name, password_hash, members_info) VALUES (?, ?, 'Team')");
+                $stmtInsert->execute([$teamName, $dummy]);
+                $teamId = (int)$pdo->lastInsertId();
+            } else {
+                $teamId = (int)$team['id'];
+                $teamName = $team['team_name'];
+            }
+            $_SESSION['team_id'] = $teamId;
+            $_SESSION['team_name'] = $teamName;
+            header('Location: index.php');
+            exit;
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -12,7 +34,7 @@ if (isTeamLoggedIn()) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Access — HackIQ</title>
+  <title>Enter Team Name — HackIQ</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,165 +48,40 @@ if (isTeamLoggedIn()) {
       <div class="brand-icon">HQ</div>
       <div>
         <div class="brand-title">HackIQ</div>
-        <span class="brand-tag">Terminal Auth</span>
+        <span class="brand-tag">Team Entry</span>
       </div>
     </a>
     <div class="nav-actions">
-      <a href="index.php" class="nav-link">← Return Home</a>
-      <a href="leaderboard.php" class="nav-link">Live Leaderboard</a>
+      <a href="index.php" class="nav-link">← Go to Rounds 1–7</a>
     </div>
   </nav>
 
   <div class="container">
-    <div class="auth-wrapper">
-      <div class="card">
-        <div class="auth-tabs">
-          <div class="auth-tab active" id="tabLogin" onclick="switchTab('login')">Team Login</div>
-          <div class="auth-tab" id="tabRegister" onclick="switchTab('register')">New Team Register</div>
+    <div class="auth-wrapper" style="margin-top:4rem;">
+      <div class="card" style="text-align:center;">
+        <div style="font-size:3rem; margin-bottom:0.75rem;">🛡️</div>
+        <h2 style="font-size:1.75rem; font-weight:800; margin-bottom:0.5rem;">Enter Your Team Name</h2>
+        <p style="color:var(--text-muted); font-size:0.95rem; margin-bottom:1.75rem;">
+          Type any team name you want. Passwords are only required when opening each round.
+        </p>
+
+        <form method="POST" action="login.php">
+          <div class="form-group" style="text-align:left;">
+            <label class="form-label" for="team_name">Team Name</label>
+            <input type="text" id="team_name" name="team_name" class="form-input" placeholder="e.g. CyberKnights" required autofocus style="font-size:1.1rem; padding:0.85rem 1rem;">
+            <div class="form-help">Enter any team name for your group.</div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:1.5rem;">
+            Continue to Rounds Arena →
+          </button>
+        </form>
+
+        <div style="margin-top:1.5rem; font-size:0.85rem; color:var(--text-dim);">
+          Venue: <strong>LSL04</strong> • Coordinators: <strong>Puneeth S & Prajwal BU</strong>
         </div>
-
-        <div id="authAlert" style="display:none; padding:0.75rem 1rem; border-radius:var(--radius-sm); margin-bottom:1.25rem; font-size:0.9rem; font-family:var(--font-mono);"></div>
-
-        <!-- Login Form -->
-        <form id="loginForm" onsubmit="handleLogin(event)">
-          <div class="form-group">
-            <label class="form-label" for="loginTeamName">Team Name</label>
-            <input type="text" id="loginTeamName" class="form-input" placeholder="e.g. CyberKnights" required autofocus>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="loginPassword">Team Password</label>
-            <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" required>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn" style="margin-top:1.5rem;">
-            Authenticate & Enter Dashboard
-          </button>
-        </form>
-
-        <!-- Register Form -->
-        <form id="registerForm" onsubmit="handleRegister(event)" style="display:none;">
-          <div class="form-group">
-            <label class="form-label" for="regTeamName">Team Name (Unique)</label>
-            <input type="text" id="regTeamName" class="form-input" placeholder="e.g. ByteBrigade" required>
-            <div class="form-help">Must be unique across all 15 competing teams.</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="regMembers">Team Members (4 Members)</label>
-            <input type="text" id="regMembers" class="form-input" placeholder="Names: Member 1, Member 2, Member 3, Member 4" required>
-            <div class="form-help">Each team must consist of 4 participants.</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="regPassword">Team Password</label>
-            <input type="password" id="regPassword" class="form-input" placeholder="Create strong team password" required minlength="4">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="regConfirmPassword">Confirm Password</label>
-            <input type="password" id="regConfirmPassword" class="form-input" placeholder="Re-type password" required minlength="4">
-          </div>
-          <button type="submit" class="btn btn-primary btn-block btn-lg" id="regBtn" style="margin-top:1.5rem;">
-            Register Team & Start
-          </button>
-        </form>
-      </div>
-
-      <div style="text-align:center; margin-top:1.5rem; font-size:0.85rem; color:var(--text-muted);">
-        Event Venue: <strong>LSL04</strong> • Fee: <strong>₹150 / Team</strong><br>
-        Organizers: Puneeth S & Prajwal BU
       </div>
     </div>
   </div>
 
-  <script src="js/app.js"></script>
-  <script>
-    function switchTab(tab) {
-      const alertBox = document.getElementById('authAlert');
-      alertBox.style.display = 'none';
-
-      if (tab === 'login') {
-        document.getElementById('tabLogin').classList.add('active');
-        document.getElementById('tabRegister').classList.remove('active');
-        document.getElementById('loginForm').style.display = 'block';
-        document.getElementById('registerForm').style.display = 'none';
-        document.getElementById('loginTeamName').focus();
-      } else {
-        document.getElementById('tabLogin').classList.remove('active');
-        document.getElementById('tabRegister').classList.add('active');
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('registerForm').style.display = 'block';
-        document.getElementById('regTeamName').focus();
-      }
-    }
-
-    function showAlert(msg, isSuccess = false) {
-      const alertBox = document.getElementById('authAlert');
-      alertBox.innerText = msg;
-      alertBox.style.display = 'block';
-      if (isSuccess) {
-        alertBox.style.background = 'rgba(0, 255, 136, 0.12)';
-        alertBox.style.color = 'var(--accent-green)';
-        alertBox.style.border = '1px solid var(--accent-green)';
-      } else {
-        alertBox.style.background = 'rgba(255, 51, 102, 0.12)';
-        alertBox.style.color = '#ff99aa';
-        alertBox.style.border = '1px solid var(--accent-red)';
-      }
-    }
-
-    async function handleLogin(e) {
-      e.preventDefault();
-      const team_name = document.getElementById('loginTeamName').value.trim();
-      const password = document.getElementById('loginPassword').value.trim();
-      const btn = document.getElementById('loginBtn');
-
-      btn.disabled = true;
-      btn.innerText = 'Authenticating...';
-
-      const res = await App.fetch('api/login.php', {
-        method: 'POST',
-        body: { team_name, password }
-      });
-
-      btn.disabled = false;
-      btn.innerText = 'Authenticate & Enter Dashboard';
-
-      if (res.success) {
-        showAlert('Authentication verified! Redirecting to Arena...', true);
-        setTimeout(() => { window.location.href = 'dashboard.php'; }, 700);
-      } else {
-        showAlert(res.error || 'Login failed.');
-      }
-    }
-
-    async function handleRegister(e) {
-      e.preventDefault();
-      const team_name = document.getElementById('regTeamName').value.trim();
-      const members_info = document.getElementById('regMembers').value.trim();
-      const password = document.getElementById('regPassword').value.trim();
-      const confirm_password = document.getElementById('regConfirmPassword').value.trim();
-      const btn = document.getElementById('regBtn');
-
-      if (password !== confirm_password) {
-        showAlert('Passwords do not match.');
-        return;
-      }
-
-      btn.disabled = true;
-      btn.innerText = 'Registering Team...';
-
-      const res = await App.fetch('api/register.php', {
-        method: 'POST',
-        body: { team_name, members_info, password, confirm_password }
-      });
-
-      btn.disabled = false;
-      btn.innerText = 'Register Team & Start';
-
-      if (res.success) {
-        showAlert('Team successfully registered! Redirecting to Arena...', true);
-        setTimeout(() => { window.location.href = 'dashboard.php'; }, 700);
-      } else {
-        showAlert(res.error || 'Registration failed.');
-      }
-    }
-  </script>
 </body>
 </html>
